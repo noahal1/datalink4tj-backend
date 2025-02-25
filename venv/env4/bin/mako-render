@@ -1,4 +1,4 @@
-#!/home/noah/datalink/env4/bin/python3
+#!/home/noah/datalink4tj-backend/venv/env4/bin/python3
 # -*- coding: utf-8 -*-
 import sys
 from mako.cmd import cmdline
