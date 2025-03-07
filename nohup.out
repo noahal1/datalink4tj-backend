@@ -1,0 +1,41 @@
+INFO:     Will watch for changes in these directories: ['/home/noah/datalink4tj-backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [4701] using StatReload
+/home/noah/datalink4tj-backend/venv/env4/lib/python3.12/site-packages/pydantic/_internal/_config.py:345: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [4703]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:49950 - "GET /events HTTP/1.1" 307 Temporary Redirect
+INFO:     127.0.0.1:49950 - "GET /events/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49950 - "GET /events HTTP/1.1" 307 Temporary Redirect
+INFO:     127.0.0.1:49950 - "GET /events/ HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [4703]
+INFO:     Stopping reloader process [4701]
+INFO:     Will watch for changes in these directories: ['/home/noah/datalink4tj-backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [4835] using StatReload
+/home/noah/datalink4tj-backend/venv/env4/lib/python3.12/site-packages/pydantic/_internal/_config.py:345: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [4837]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:36656 - "GET /events HTTP/1.1" 307 Temporary Redirect
+INFO:     127.0.0.1:36656 - "GET /events HTTP/1.1" 307 Temporary Redirect
+INFO:     127.0.0.1:36664 - "GET /events/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36656 - "GET /events HTTP/1.1" 307 Temporary Redirect
+INFO:     127.0.0.1:36656 - "GET /events/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40008 - "GET /events HTTP/1.1" 307 Temporary Redirect
+INFO:     127.0.0.1:40008 - "GET /events/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52032 - "GET /events HTTP/1.1" 307 Temporary Redirect
+INFO:     127.0.0.1:52032 - "GET /events/ HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [4837]
+INFO:     Stopping reloader process [4835]

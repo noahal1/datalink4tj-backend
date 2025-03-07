@@ -1,13 +1,14 @@
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
 
 class QaBase(BaseModel):
     line: str
     day: str
     month: str
-    year: str
+    year: str = str(datetime.now().year)
     value: str
-    scrapflag: bool
+    scrapflag: bool = False
 
 class QaCreate(QaBase):
     pass

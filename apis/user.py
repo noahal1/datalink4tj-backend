@@ -127,14 +127,7 @@ async def update_user(
 async def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: user_schema.User = Security(get_current_user)
 ):
-    if current_user.id  == user_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete yourself."
-        )
-    
     success = user_service.delete_user_service(db,  user_id)
     if not success:
         raise HTTPException(status_code=404, detail="User not found")

@@ -48,6 +48,13 @@ def verify_password(plain_password, hashed_password):
     md5_hash = hashlib.md5(plain_password.encode()).hexdigest()
     return md5_hash == hashed_password
 
+def delete_user_service(db: Session, user_id: int):
+    db_user = get_user_service(db, user_id)
+    if not db_user:
+        return False
+    db.delete(db_user)
+    db.commit()
+    return True
 
 def create_user_service(db: Session, user: UserCreate) -> User:
     # 检查用户名是否已经存在
