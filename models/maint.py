@@ -9,7 +9,7 @@ class MaintDaily(Base):
     user_id = Column(Integer)
     title = Column(String(255))
     wheres = Column(String(255))
-    type = Column(Integer, nullablew=True)
+    type = Column(Integer)
     #predict_time = Column(Integer,nullable=True)  预计工时暂时不考虑
     content_daily = Column(String(255))
     solved_flag = Column(Integer)
