@@ -13,6 +13,7 @@ class User(Base):
     department_id = Column(Integer, ForeignKey('departments.id'))
     password = Column(String(255), nullable=False)
     department = relationship("Department", back_populates="users")
+    activities = relationship("Activity", back_populates="user")
 
     def verify_password(self, password: str) -> bool:
         return pwd_context.verify(password, self.password)

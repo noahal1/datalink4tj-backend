@@ -6,6 +6,15 @@ from models.qa import Qa as qa_model,Qad as qad_model
 from schemas.qa import Qa as qa_schema, QaCreate, QaUpdate
 from schemas.qad import Qad as qad_schema, QadCreate, QadUpdate
 from datetime import datetime
+from apis.user import get_current_user
+from models.user import User
+from services.activity_service import ActivityService
+from models.activity import Activity
+import logging
+
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/qa",
@@ -14,11 +23,30 @@ router = APIRouter(
 )
 
 @router.post("/", response_model=qa_schema, status_code=status.HTTP_201_CREATED, summary="Create a new QA entry")
-async def create_qa(qa: QaCreate, db: Session = Depends(get_db)):
+async def create_qa(qa: QaCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # 创建QA记录
     db_qa = qa_model(**qa.dict())
     db.add(db_qa)
     db.commit()
-    db.refresh(db_qa)
+    db.refresh(db_qa)   
+    
+    # 记录活动
+    try:
+        activity = ActivityService.record_data_change(
+            db=db,
+            user=current_user,
+            module="QA",
+            action_type="CREATE",
+            title="创建GP12数据",
+            action=f"创建了{qa.line}的GP12数据",
+            details=f"日期: {qa.year}-{qa.month}-{qa.day}, 生产线: {qa.line}, 值: {qa.value}",
+            after_data=qa.dict(),
+            target="/quality"
+        )
+        logger.info(f"数据变更记录成功: {activity.id} - {activity.title}")
+    except Exception as e:
+        logger.error(f"记录数据变更失败: {str(e)}")
+    
     return db_qa
 
 @router.get("/", response_model=List[qa_schema], summary="Get QA entries by month")
@@ -31,7 +59,10 @@ async def read_qas(month: str, db: Session = Depends(get_db)):
     return qas
 
 @router.put("/", summary="Update QA entries")
-async def update_qas(qas: List[QaUpdate], db: Session = Depends(get_db)):
+async def update_qas(qas: List[QaUpdate], db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    updated_entries = []
+    created_entries = []
+    
     for qa in qas:
         db_qa = db.query(qa_model).filter(
             qa_model.day == qa.day,
@@ -40,33 +71,125 @@ async def update_qas(qas: List[QaUpdate], db: Session = Depends(get_db)):
             qa_model.line == qa.line,
             qa_model.scrapflag == qa.scrapflag
         ).first()
+        
         if db_qa:
+            # 保存更新前的数据
+            before_data = {
+                "id": db_qa.id,
+                "day": db_qa.day,
+                "month": db_qa.month,
+                "year": db_qa.year,
+                "line": db_qa.line,
+                "value": db_qa.value,
+                "scrapflag": db_qa.scrapflag
+            }
+            
+            # 更新数据
             for key, value in qa.dict().items():
                 setattr(db_qa, key, value)
+                
+            updated_entries.append({
+                "before": before_data,
+                "after": qa.dict()
+            })
         else:
+            # 创建新记录
             new_qa = qa_model(**qa.dict())
             db.add(new_qa)
+            created_entries.append(qa.dict())
+    
     db.commit()
+    
+    # 记录更新活动
+    if updated_entries:
+        ActivityService.record_data_change(
+            db=db,
+            user=current_user,
+            module="QA",
+            action_type="UPDATE",
+            title="更新质量数据",
+            action=f"更新了{len(updated_entries)}条质量数据",
+            details=f"月份: {qas[0].month}, 年份: {qas[0].year}",
+            before_data=[entry["before"] for entry in updated_entries],
+            after_data=[entry["after"] for entry in updated_entries],
+            target="/quality"
+        )
+    
+    # 记录创建活动
+    if created_entries:
+        ActivityService.record_data_change(
+            db=db,
+            user=current_user,
+            module="QA",
+            action_type="CREATE",
+            title="创建质量数据",
+            action=f"创建了{len(created_entries)}条质量数据",
+            details=f"月份: {qas[0].month}, 年份: {qas[0].year}",
+            after_data=created_entries,
+            target="/quality"
+        )
+    
     return {"message": "QA entries updated successfully"}
 
 @router.delete("/{qa_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a QA entry by ID")
-async def delete_qa(qa_id: int, db: Session = Depends(get_db)):
+async def delete_qa(qa_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     db_qa = db.query(qa_model).filter(qa_model.id == qa_id).first()
     if not db_qa:
         raise HTTPException(status_code=404, detail="QA entry not found")
     
+    # 保存删除前的数据
+    before_data = {
+        "id": db_qa.id,
+        "day": db_qa.day,
+        "month": db_qa.month,
+        "year": db_qa.year,
+        "line": db_qa.line,
+        "value": db_qa.value,
+        "scrapflag": db_qa.scrapflag
+    }
+    
+    # 删除记录
     db.delete(db_qa)
     db.commit()
+    
+    # 记录活动
+    ActivityService.record_data_change(
+        db=db,
+        user=current_user,
+        module="QA",
+        action_type="DELETE",
+        title="删除质量数据",
+        action=f"删除了ID为{qa_id}的质量数据",
+        details=f"日期: {before_data['year']}-{before_data['month']}-{before_data['day']}, 生产线: {before_data['line']}",
+        before_data=before_data,
+        target="/quality"
+    )
+    
     return {"message": "QA entry deleted successfully"}
 
 # 以下是qad的相关端点
 
 @router.post("/qad/", response_model=qad_schema, status_code=status.HTTP_201_CREATED, summary="Create a new QAD entry")
-async def create_qad(qad: QadCreate, db: Session = Depends(get_db)):
+async def create_qad(qad: QadCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # 创建QAD记录
     db_qad = qad_model(**qad.dict())
     db.add(db_qad)
     db.commit()
     db.refresh(db_qad)
+    
+    # 记录活动
+    ActivityService.record_data_change(
+        db=db,
+        user=current_user,
+        module="QA",
+        action_type="CREATE",
+        title="创建质量杂项数据",
+        action=f"创建了{qad.month}月的质量杂项数据",
+        details=f"年份: {qad.year}, 月份: {qad.month}",
+        after_data=qad.dict(),
+        target="/qa_others"
+    )
+    
     return db_qad
 
 @router.get("/qad/", response_model=List[qad_schema], summary="Get QAD entries by month")
@@ -79,24 +202,176 @@ async def read_qads(month: str, db: Session = Depends(get_db)):
     return qads
 
 @router.put("/qad/{qad_id}", response_model=qad_schema, summary="Update a QAD entry by ID")
-async def update_qad(qad_id: int, qad: QadUpdate, db: Session = Depends(get_db)):
+async def update_qad(qad_id: int, qad: QadUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     db_qad = db.query(qad_model).filter(qad_model.id == qad_id).first()
     if not db_qad:
         raise HTTPException(status_code=404, detail="QAD entry not found")
     
+    # 保存更新前的数据
+    before_data = {
+        "id": db_qad.id,
+        "month": db_qad.month,
+        "year": db_qad.year,
+        "supplier_defect": db_qad.supplier_defect,
+        "formal_amount": db_qad.formal_amount,
+        "informal_amount": db_qad.informal_amount,
+        "qc_ignore_amount": db_qad.qc_ignore_amount,
+        "scrap_rate_c": db_qad.scrap_rate_c,
+        "scrap_rate_m": db_qad.scrap_rate_m,
+        "Ftt_tjm": db_qad.Ftt_tjm,
+        "Ftt_tjc": db_qad.Ftt_tjc
+    }
+    
+    # 更新数据
     for key, value in qad.dict().items():
         setattr(db_qad, key, value)
     
     db.commit()
     db.refresh(db_qad)
+    
+    # 记录活动
+    ActivityService.record_data_change(
+        db=db,
+        user=current_user,
+        module="QA",
+        action_type="UPDATE",
+        title="更新质量杂项数据",
+        action=f"更新了{db_qad.month}月的质量杂项数据",
+        details=f"年份: {db_qad.year}, 月份: {db_qad.month}",
+        before_data=before_data,
+        after_data=qad.dict(),
+        target="/qa_others"
+    )
+    
     return db_qad
 
 @router.delete("/qad/{qad_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a QAD entry by ID")
-async def delete_qad(qad_id: int, db: Session = Depends(get_db)):
+async def delete_qad(qad_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     db_qad = db.query(qad_model).filter(qad_model.id == qad_id).first()
     if not db_qad:
         raise HTTPException(status_code=404, detail="QAD entry not found")
     
+    # 保存删除前的数据
+    before_data = {
+        "id": db_qad.id,
+        "month": db_qad.month,
+        "year": db_qad.year,
+        "supplier_defect": db_qad.supplier_defect,
+        "formal_amount": db_qad.formal_amount,
+        "informal_amount": db_qad.informal_amount,
+        "qc_ignore_amount": db_qad.qc_ignore_amount,
+        "scrap_rate_c": db_qad.scrap_rate_c,
+        "scrap_rate_m": db_qad.scrap_rate_m,
+        "Ftt_tjm": db_qad.Ftt_tjm,
+        "Ftt_tjc": db_qad.Ftt_tjc
+    }
+    
+    # 删除记录
     db.delete(db_qad)
     db.commit()
+    
+    # 记录活动
+    ActivityService.record_data_change(
+        db=db,
+        user=current_user,
+        module="QA",
+        action_type="DELETE",
+        title="删除质量杂项数据",
+        action=f"删除了ID为{qad_id}的质量杂项数据",
+        details=f"年份: {before_data['year']}, 月份: {before_data['month']}",
+        before_data=before_data,
+        target="/qa_others"
+    )
+    
     return {"message": "QAD entry deleted successfully"}
+
+@router.get("/test-activity-record/", summary="Test activity record feature")
+async def test_activity_record(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """
+    测试数据变更记录功能
+    """
+    try:
+        # 创建一个测试QA记录
+        test_qa = qa_model(
+            day="1",
+            month="1",
+            year="2023",
+            line="TEST",
+            value="100",
+            scrapflag=False
+        )
+        db.add(test_qa)
+        db.commit()
+        db.refresh(test_qa)
+        
+        # 记录创建活动
+        create_activity = ActivityService.record_data_change(
+            db=db,
+            user=current_user,
+            module="QA",
+            action_type="CREATE",
+            title="测试 - 创建质量数据",
+            action="创建了测试生产线的质量数据",
+            details="测试数据变更记录功能",
+            after_data={"day": "1", "month": "1", "year": "2023", "line": "TEST", "value": "100"},
+            target="/quality"
+        )
+        
+        # 更新测试记录
+        before_data = {
+            "id": test_qa.id,
+            "day": test_qa.day,
+            "month": test_qa.month,
+            "year": test_qa.year,
+            "line": test_qa.line,
+            "value": test_qa.value
+        }
+        
+        test_qa.value = "200"
+        db.commit()
+        
+        # 记录更新活动
+        update_activity = ActivityService.record_data_change(
+            db=db,
+            user=current_user,
+            module="QA",
+            action_type="UPDATE",
+            title="测试 - 更新质量数据",
+            action="更新了测试生产线的质量数据",
+            details="测试数据变更记录功能",
+            before_data=before_data,
+            after_data={"day": "1", "month": "1", "year": "2023", "line": "TEST", "value": "200"},
+            target="/quality"
+        )
+        
+        # 删除测试记录
+        db.delete(test_qa)
+        db.commit()
+        
+        # 记录删除活动
+        delete_activity = ActivityService.record_data_change(
+            db=db,
+            user=current_user,
+            module="QA",
+            action_type="DELETE",
+            title="测试 - 删除质量数据",
+            action="删除了测试生产线的质量数据",
+            details="测试数据变更记录功能",
+            before_data={"id": test_qa.id, "day": "1", "month": "1", "year": "2023", "line": "TEST", "value": "200"},
+            target="/quality"
+        )
+        
+        # 获取所有活动记录
+        activities = db.query(Activity).order_by(Activity.created_at.desc()).limit(10).all()
+        
+        activity_list = []
+        for activity in activities:
+            activity_list.append(activity.to_dict())
+        
+        return {
+            "message": "测试数据变更记录功能成功",
+            "activities": activity_list
+        }
+    except Exception as e:
+        logger.error(f"测试数据变更记录失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"测试失败: {str(e)}")
