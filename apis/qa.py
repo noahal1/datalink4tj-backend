@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from db.database import get_db
-from models.qa import Qa as qa_model,Qad as qad_model, QaKpi as qa_kpi_model
-from schemas.qa import Qa as qa_schema, QaCreate, QaUpdate
+from models.qa import Qa as qa_model,Qad as qad_model, QaKpi as qa_kpi_model, MonthlyTotal
+from schemas.qa import Qa as qa_schema, QaCreate, QaUpdate, QAResponse, MonthlyTotalCreate, MonthlyTotalResponse
 from schemas.qad import Qad as qad_schema, QadCreate, QadUpdate
 from schemas.qa_kpi import QaKpi as qa_kpi_schema, QaKpiCreate, QaKpiUpdate, QaKpiBulkUpdate
 from datetime import datetime
@@ -503,3 +503,39 @@ async def update_kpi_data(kpi_data: QaKpiBulkUpdate, db: Session = Depends(get_d
     )
     
     return created_items
+
+@router.get("/monthly", response_model=List[MonthlyTotalResponse])
+def get_monthly_totals(month: str, year: str, db: Session = Depends(get_db)):
+    """获取指定月份的月度总数"""
+    monthly_totals = db.query(MonthlyTotal).filter(
+        MonthlyTotal.month == month,
+        MonthlyTotal.year == year
+    ).all()
+    return monthly_totals
+
+@router.put("/monthly")
+def update_monthly_totals(monthly_totals: List[MonthlyTotalCreate], db: Session = Depends(get_db)):
+    """更新月度总数"""
+    for total_data in monthly_totals:
+        # 查找是否已存在记录
+        existing = db.query(MonthlyTotal).filter(
+            MonthlyTotal.line == total_data.line,
+            MonthlyTotal.month == total_data.month,
+            MonthlyTotal.year == total_data.year
+        ).first()
+        
+        if existing:
+            # 更新现有记录
+            existing.amount = total_data.amount
+        else:
+            # 创建新记录
+            new_total = MonthlyTotal(
+                line=total_data.line,
+                month=total_data.month,
+                year=total_data.year,
+                amount=total_data.amount
+            )
+            db.add(new_total)
+    
+    db.commit()
+    return {"message": "Monthly amounts updated successfully"}
