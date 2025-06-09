@@ -27,3 +27,15 @@ class Qad(Base):
     scrap_rate_m = Column(Float)
     Ftt_tjm = Column(Float)
     Ftt_tjc = Column(Float)
+
+#质量KPI数据
+class QaKpi(Base):
+    __tablename__ = "qa_kpi"
+    id = Column(Integer, primary_key=True, index=True)
+    month = Column(Integer)
+    year = Column(Integer, default=datetime.now().year, nullable=False)
+    area = Column(String(50))  # 区域：新厂、老厂、汇总
+    description = Column(String(255))  # KPI描述
+    new_factory = Column(Float, default=0)  # 新厂数据
+    old_factory = Column(Float, default=0)  # 老厂数据
+    total = Column(Float, default=0)  # 汇总数据

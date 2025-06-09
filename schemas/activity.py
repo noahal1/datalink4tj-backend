@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Union, List
 from datetime import datetime
 
 class ActivityBase(BaseModel):
@@ -59,6 +59,11 @@ class ActivityResponse(BaseModel):
     
     class Config:
         orm_mode = True
+
+class PaginatedActivityResponse(BaseModel):
+    """分页的活动响应模型"""
+    total: int
+    items: List[ActivityResponse]
 
 class DataChangePayload(BaseModel):
     """数据变更负载"""

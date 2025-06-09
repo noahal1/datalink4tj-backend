@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from db.database import get_db
-from models.qa import Qa as qa_model,Qad as qad_model
+from models.qa import Qa as qa_model,Qad as qad_model, QaKpi as qa_kpi_model
 from schemas.qa import Qa as qa_schema, QaCreate, QaUpdate
 from schemas.qad import Qad as qad_schema, QadCreate, QadUpdate
+from schemas.qa_kpi import QaKpi as qa_kpi_schema, QaKpiCreate, QaKpiUpdate, QaKpiBulkUpdate
 from datetime import datetime
 from apis.user import get_current_user
 from models.user import User
@@ -375,3 +376,130 @@ async def test_activity_record(db: Session = Depends(get_db), current_user: User
     except Exception as e:
         logger.error(f"测试数据变更记录失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"测试失败: {str(e)}")
+
+# KPI 数据相关端点
+@router.get("/kpi/", response_model=List[qa_kpi_schema], summary="获取KPI数据")
+async def get_kpi_data(month: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    year = datetime.now().year
+    kpi_data = db.query(qa_kpi_model).filter(
+        qa_kpi_model.year == year,
+        qa_kpi_model.month == month
+    ).all()
+    return kpi_data
+
+@router.post("/kpi/", response_model=List[qa_kpi_schema], status_code=status.HTTP_201_CREATED, summary="创建KPI数据")
+async def create_kpi_data(kpi_data: QaKpiBulkUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    created_items = []
+    
+    # 先删除该月份的所有数据
+    db.query(qa_kpi_model).filter(
+        qa_kpi_model.year == kpi_data.year,
+        qa_kpi_model.month == kpi_data.month
+    ).delete()
+    
+    # 创建新数据
+    for item in kpi_data.items:
+        db_item = qa_kpi_model(
+            month=kpi_data.month,
+            year=kpi_data.year,
+            area=item.area,
+            description=item.description,
+            new_factory=item.new_factory,
+            old_factory=item.old_factory,
+            total=item.total
+        )
+        db.add(db_item)
+        created_items.append(db_item)
+    
+    db.commit()
+    
+    # 刷新所有项以获取ID
+    for item in created_items:
+        db.refresh(item)
+    
+    # 记录活动
+    ActivityService.record_data_change(
+        db=db,
+        user=current_user,
+        module="QA",
+        action_type="CREATE",
+        title="创建质量KPI数据",
+        action=f"创建/更新了{kpi_data.month}月的质量KPI数据",
+        details=f"年份: {kpi_data.year}, 月份: {kpi_data.month}, 条目数: {len(kpi_data.items)}",
+        after_data=[{
+            "area": item.area,
+            "description": item.description,
+            "new_factory": item.new_factory,
+            "old_factory": item.old_factory,
+            "total": item.total
+        } for item in kpi_data.items],
+        target="/qa_others"
+    )
+    
+    return created_items
+
+@router.put("/kpi/", response_model=List[qa_kpi_schema], summary="更新KPI数据")
+async def update_kpi_data(kpi_data: QaKpiBulkUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # 获取原始数据用于比较
+    original_items = db.query(qa_kpi_model).filter(
+        qa_kpi_model.year == kpi_data.year,
+        qa_kpi_model.month == kpi_data.month
+    ).all()
+    
+    original_data = [{
+        "id": item.id,
+        "area": item.area,
+        "description": item.description,
+        "new_factory": item.new_factory,
+        "old_factory": item.old_factory,
+        "total": item.total
+    } for item in original_items]
+    
+    # 删除现有数据
+    db.query(qa_kpi_model).filter(
+        qa_kpi_model.year == kpi_data.year,
+        qa_kpi_model.month == kpi_data.month
+    ).delete()
+    
+    # 创建新数据
+    created_items = []
+    for item in kpi_data.items:
+        db_item = qa_kpi_model(
+            month=kpi_data.month,
+            year=kpi_data.year,
+            area=item.area,
+            description=item.description,
+            new_factory=item.new_factory,
+            old_factory=item.old_factory,
+            total=item.total
+        )
+        db.add(db_item)
+        created_items.append(db_item)
+    
+    db.commit()
+    
+    # 刷新所有项以获取ID
+    for item in created_items:
+        db.refresh(item)
+    
+    # 记录活动
+    ActivityService.record_data_change(
+        db=db,
+        user=current_user,
+        module="QA",
+        action_type="UPDATE",
+        title="更新质量KPI数据",
+        action=f"更新了{kpi_data.month}月的质量KPI数据",
+        details=f"年份: {kpi_data.year}, 月份: {kpi_data.month}, 条目数: {len(kpi_data.items)}",
+        before_data=original_data,
+        after_data=[{
+            "area": item.area,
+            "description": item.description,
+            "new_factory": item.new_factory,
+            "old_factory": item.old_factory,
+            "total": item.total
+        } for item in kpi_data.items],
+        target="/qa_others"
+    )
+    
+    return created_items

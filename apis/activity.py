@@ -1,21 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
 from datetime import datetime, timedelta
 
 from db.session import get_db
 from models.activity import Activity
 from models.user import User
-from schemas.activity import ActivityCreate, ActivityResponse, DataChangePayload
+from schemas.activity import ActivityCreate, ActivityResponse, DataChangePayload, PaginatedActivityResponse
 from apis.user import get_current_user
 
 router = APIRouter()
 
-@router.get("/activities/", response_model=List[ActivityResponse])
+@router.get("/activities/", response_model=PaginatedActivityResponse)
 def get_activities(
     skip: int = 0,
-    limit: int = 100,
-    user_id: Optional[int] = None,
+    limit: int = 10,
+    user_name: Optional[str] = None,
     department: Optional[str] = None,
     type: Optional[str] = None,
     days: Optional[int] = None,
@@ -25,20 +26,23 @@ def get_activities(
     """
     获取活动记录列表
     
-    可以通过用户ID、部门、类型和时间范围进行筛选
+    可以通过用户名、部门、类型和时间范围进行筛选
     """
     query = db.query(Activity)
     
     # 筛选条件
-    if user_id:
-        query = query.filter(Activity.user_id == user_id)
+    if user_name:
+        query = query.filter(Activity.user_name.ilike(f"%{user_name}%"))
     if department:
         query = query.filter(Activity.department == department)
     if type:
-        query = query.filter(Activity.type == type)
+        query = query.filter(Activity.type.ilike(f"%{type}%"))
     if days:
         date_from = datetime.now() - timedelta(days=days)
         query = query.filter(Activity.created_at >= date_from)
+    
+    # 获取总数
+    total = query.count()
     
     # 排序：最新的在前面
     query = query.order_by(Activity.created_at.desc())
@@ -47,7 +51,12 @@ def get_activities(
     activities = query.offset(skip).limit(limit).all()
     
     # 转换为响应格式
-    return [activity.to_dict() for activity in activities]
+    activity_responses = [activity.to_dict() for activity in activities]
+    
+    return PaginatedActivityResponse(
+        total=total,
+        items=activity_responses
+    )
 
 @router.post("/activities/", response_model=ActivityResponse)
 def create_activity(
