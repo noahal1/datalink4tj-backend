@@ -1,17 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
-from db.database import get_db
-from models.qa import Qa as qa_model,Qad as qad_model, QaKpi as qa_kpi_model, MonthlyTotal
-from schemas.qa import Qa as qa_schema, QaCreate, QaUpdate, QAResponse, MonthlyTotalCreate, MonthlyTotalResponse
+from sqlalchemy.exc import IntegrityError
+from typing import List, Optional
+from datetime import datetime, date
+import logging
+
+from db.session import get_db
+from models.qa import Qa as qa_model
+from models.user import User
+from core.security import get_current_user
+from schemas.qa import QaCreate, QaResponse, QaUpdate, Qa as qa_schema
+from services.activity_service import record_activity
+from models.qa import Qad as qad_model, QaKpi as qa_kpi_model, MonthlyTotal
+from schemas.qa import MonthlyTotalCreate, MonthlyTotalResponse
 from schemas.qad import Qad as qad_schema, QadCreate, QadUpdate
 from schemas.qa_kpi import QaKpi as qa_kpi_schema, QaKpiCreate, QaKpiUpdate, QaKpiBulkUpdate
-from datetime import datetime
-from apis.user import get_current_user
-from models.user import User
-from services.activity_service import ActivityService
 from models.activity import Activity
-import logging
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -33,13 +37,13 @@ async def create_qa(qa: QaCreate, db: Session = Depends(get_db), current_user: U
     
     # 记录活动
     try:
-        activity = ActivityService.record_data_change(
+        activity = record_activity(
             db=db,
             user=current_user,
             module="QA",
             action_type="CREATE",
-            title="创建GP12数据",
-            action=f"创建了{qa.line}的GP12数据",
+            title="创建GP12&报废数据",
+            action=f"创建了{qa.line}的GP12&报废数据",
             details=f"日期: {qa.year}-{qa.month}-{qa.day}, 生产线: {qa.line}, 值: {qa.value}",
             after_data=qa.dict(),
             target="/quality"
@@ -51,8 +55,12 @@ async def create_qa(qa: QaCreate, db: Session = Depends(get_db), current_user: U
     return db_qa
 
 @router.get("/", response_model=List[qa_schema], summary="Get QA entries by month")
-async def read_qas(month: str, db: Session = Depends(get_db)):
+async def read_qas(month: Optional[str] = None, db: Session = Depends(get_db)):
     year = datetime.now().year
+    if month is None:
+        # 如果未提供月份，默认使用当前月份
+        month = str(datetime.now().month)
+    
     qas = db.query(qa_model).filter(
         qa_model.year == str(year),
         qa_model.month == month
@@ -103,7 +111,7 @@ async def update_qas(qas: List[QaUpdate], db: Session = Depends(get_db), current
     
     # 记录更新活动
     if updated_entries:
-        ActivityService.record_data_change(
+        record_activity(
             db=db,
             user=current_user,
             module="QA",
@@ -118,7 +126,7 @@ async def update_qas(qas: List[QaUpdate], db: Session = Depends(get_db), current
     
     # 记录创建活动
     if created_entries:
-        ActivityService.record_data_change(
+        record_activity(
             db=db,
             user=current_user,
             module="QA",
@@ -154,7 +162,7 @@ async def delete_qa(qa_id: int, db: Session = Depends(get_db), current_user: Use
     db.commit()
     
     # 记录活动
-    ActivityService.record_data_change(
+    record_activity(
         db=db,
         user=current_user,
         module="QA",
@@ -179,7 +187,7 @@ async def create_qad(qad: QadCreate, db: Session = Depends(get_db), current_user
     db.refresh(db_qad)
     
     # 记录活动
-    ActivityService.record_data_change(
+    record_activity(
         db=db,
         user=current_user,
         module="QA",
@@ -194,8 +202,12 @@ async def create_qad(qad: QadCreate, db: Session = Depends(get_db), current_user
     return db_qad
 
 @router.get("/qad/", response_model=List[qad_schema], summary="Get QAD entries by month")
-async def read_qads(month: str, db: Session = Depends(get_db)):
+async def read_qads(month: Optional[str] = None, db: Session = Depends(get_db)):
     year = datetime.now().year
+    if month is None:
+        # 如果未提供月份，默认使用当前月份
+        month = str(datetime.now().month)
+        
     qads = db.query(qad_model).filter(
         qad_model.year == str(year),
         qad_model.month == month
@@ -231,7 +243,7 @@ async def update_qad(qad_id: int, qad: QadUpdate, db: Session = Depends(get_db),
     db.refresh(db_qad)
     
     # 记录活动
-    ActivityService.record_data_change(
+    record_activity(
         db=db,
         user=current_user,
         module="QA",
@@ -272,7 +284,7 @@ async def delete_qad(qad_id: int, db: Session = Depends(get_db), current_user: U
     db.commit()
     
     # 记录活动
-    ActivityService.record_data_change(
+    record_activity(
         db=db,
         user=current_user,
         module="QA",
@@ -306,7 +318,7 @@ async def test_activity_record(db: Session = Depends(get_db), current_user: User
         db.refresh(test_qa)
         
         # 记录创建活动
-        create_activity = ActivityService.record_data_change(
+        create_activity = record_activity(
             db=db,
             user=current_user,
             module="QA",
@@ -332,7 +344,7 @@ async def test_activity_record(db: Session = Depends(get_db), current_user: User
         db.commit()
         
         # 记录更新活动
-        update_activity = ActivityService.record_data_change(
+        update_activity = record_activity(
             db=db,
             user=current_user,
             module="QA",
@@ -350,7 +362,7 @@ async def test_activity_record(db: Session = Depends(get_db), current_user: User
         db.commit()
         
         # 记录删除活动
-        delete_activity = ActivityService.record_data_change(
+        delete_activity = record_activity(
             db=db,
             user=current_user,
             module="QA",
@@ -379,8 +391,17 @@ async def test_activity_record(db: Session = Depends(get_db), current_user: User
 
 # KPI 数据相关端点
 @router.get("/kpi/", response_model=List[qa_kpi_schema], summary="获取KPI数据")
-async def get_kpi_data(month: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    year = datetime.now().year
+async def get_kpi_data(
+    month: Optional[int] = None, 
+    year: Optional[int] = None,
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    if year is None:
+        year = datetime.now().year
+    if month is None:
+        month = datetime.now().month
+        
     kpi_data = db.query(qa_kpi_model).filter(
         qa_kpi_model.year == year,
         qa_kpi_model.month == month
@@ -418,7 +439,7 @@ async def create_kpi_data(kpi_data: QaKpiBulkUpdate, db: Session = Depends(get_d
         db.refresh(item)
     
     # 记录活动
-    ActivityService.record_data_change(
+    record_activity(
         db=db,
         user=current_user,
         module="QA",
@@ -483,7 +504,7 @@ async def update_kpi_data(kpi_data: QaKpiBulkUpdate, db: Session = Depends(get_d
         db.refresh(item)
     
     # 记录活动
-    ActivityService.record_data_change(
+    record_activity(
         db=db,
         user=current_user,
         module="QA",
@@ -505,8 +526,19 @@ async def update_kpi_data(kpi_data: QaKpiBulkUpdate, db: Session = Depends(get_d
     return created_items
 
 @router.get("/monthly", response_model=List[MonthlyTotalResponse])
-def get_monthly_totals(month: str, year: str, db: Session = Depends(get_db)):
+def get_monthly_totals(
+    month: Optional[str] = None, 
+    year: Optional[str] = None, 
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
     """获取指定月份的月度总数"""
+    # 设置默认值
+    if month is None:
+        month = str(datetime.now().month)
+    if year is None:
+        year = str(datetime.now().year)
+        
     monthly_totals = db.query(MonthlyTotal).filter(
         MonthlyTotal.month == month,
         MonthlyTotal.year == year
@@ -514,28 +546,75 @@ def get_monthly_totals(month: str, year: str, db: Session = Depends(get_db)):
     return monthly_totals
 
 @router.put("/monthly")
-def update_monthly_totals(monthly_totals: List[MonthlyTotalCreate], db: Session = Depends(get_db)):
+def update_monthly_totals(monthly_totals: List[MonthlyTotalCreate], db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """更新月度总数"""
-    for total_data in monthly_totals:
-        # 查找是否已存在记录
-        existing = db.query(MonthlyTotal).filter(
-            MonthlyTotal.line == total_data.line,
-            MonthlyTotal.month == total_data.month,
-            MonthlyTotal.year == total_data.year
-        ).first()
-        
-        if existing:
-            # 更新现有记录
-            existing.amount = total_data.amount
+    try:
+        # 获取原始数据用于比较
+        if monthly_totals and len(monthly_totals) > 0:
+            sample = monthly_totals[0]
+            original_data = db.query(MonthlyTotal).filter(
+                MonthlyTotal.month == sample.month,
+                MonthlyTotal.year == sample.year
+            ).all()
+            
+            before_data = [{
+                "line": item.line,
+                "month": item.month,
+                "year": item.year,
+                "amount": item.amount
+            } for item in original_data]
         else:
-            # 创建新记录
-            new_total = MonthlyTotal(
-                line=total_data.line,
-                month=total_data.month,
-                year=total_data.year,
-                amount=total_data.amount
+            before_data = []
+        
+        for total_data in monthly_totals:
+            # 查找是否已存在记录
+            existing = db.query(MonthlyTotal).filter(
+                MonthlyTotal.line == total_data.line,
+                MonthlyTotal.month == total_data.month,
+                MonthlyTotal.year == total_data.year
+            ).first()
+            
+            if existing:
+                # 更新现有记录
+                existing.amount = total_data.amount
+            else:
+                # 创建新记录
+                new_total = MonthlyTotal(
+                    line=total_data.line,
+                    month=total_data.month,
+                    year=total_data.year,
+                    amount=total_data.amount
+                )
+                db.add(new_total)
+        
+        db.commit()
+        
+        # 记录活动
+        if monthly_totals and len(monthly_totals) > 0:
+            sample = monthly_totals[0]
+            record_activity(
+                db=db,
+                user=current_user,
+                module="QA",
+                action_type="UPDATE",
+                title="更新月度产量数据",
+                action=f"更新了{sample.month}月的月度产量数据",
+                details=f"年份: {sample.year}, 月份: {sample.month}, 条目数: {len(monthly_totals)}",
+                before_data=before_data,
+                after_data=[{
+                    "line": item.line,
+                    "month": item.month,
+                    "year": item.year,
+                    "amount": item.amount
+                } for item in monthly_totals],
+                target="/quality"
             )
-            db.add(new_total)
-    
-    db.commit()
-    return {"message": "Monthly amounts updated successfully"}
+        
+        return {"message": "Monthly amounts updated successfully"}
+    except Exception as e:
+        logger.error(f"更新月度产量数据失败: {str(e)}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"更新月度产量数据失败: {str(e)}"
+        )

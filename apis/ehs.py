@@ -5,7 +5,7 @@ from db.database import get_db
 from models import ehs as ehs_model
 from schemas import ehs as ehs_schema
 from datetime import datetime
-from apis.user import get_current_user
+from core.security import get_current_user
 from models.user import User
 from services.activity_service import ActivityService
 import logging

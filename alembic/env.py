@@ -8,7 +8,13 @@ from alembic import context
 # 导入Base和所有模型
 from db.database import Base
 from models.department import Department
-# 如果有其他模型，也需要导入
+from models.user import User
+from models.permission import Role, Permission
+from models.route import Route
+from models.route_permission import RoutePermission
+from models.activity import Activity
+# 导入其他所有模型
+import models
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

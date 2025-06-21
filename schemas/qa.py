@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 
-class QABase(BaseModel):
+class QaBase(BaseModel):
     line: str
     day: str
     month: str
@@ -10,23 +10,15 @@ class QABase(BaseModel):
     value: str
     scrapflag: bool = False
 
-class QACreate(QABase):
+class QaCreate(QaBase):
     pass
 
-class QAResponse(QABase):
-    id: int
-
-    class Config:
-        orm_mode = True
-
-class QaUpdate(QABase):
+class QaUpdate(QaBase):
     pass
 
-class Qa(QABase):
+class QaResponse(QaBase):
     id: int
-
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 class MonthlyTotalBase(BaseModel):
     line: str
@@ -39,14 +31,10 @@ class MonthlyTotalCreate(MonthlyTotalBase):
 
 class MonthlyTotalResponse(MonthlyTotalBase):
     id: int
+    model_config = {"from_attributes": True}
 
-    class Config:
-        orm_mode = True
-
-class QaCreate(BaseModel):
-    line: str
-    day: str
-    month: str
-    year: str
-    value: str
-    scrapflag: bool
+# 别名，用于向后兼容
+QACreate = QaCreate
+QAResponse = QaResponse
+QAUpdate = QaUpdate
+Qa = QaResponse

@@ -36,9 +36,7 @@ class ActivityInDB(ActivityBase):
     changes_before: Optional[Dict[str, Any]] = None
     changes_after: Optional[Dict[str, Any]] = None
     created_at: datetime
-    
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 class ActivityResponse(BaseModel):
     """API响应的活动模型"""
@@ -56,9 +54,7 @@ class ActivityResponse(BaseModel):
     department: Optional[str] = None
     timestamp: Optional[str] = None
     time: Optional[str] = None
-    
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 class PaginatedActivityResponse(BaseModel):
     """分页的活动响应模型"""

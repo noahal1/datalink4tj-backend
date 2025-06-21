@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import datetime, timedelta
 
 from db.session import get_db
 from models.activity import Activity
 from models.user import User
-from schemas.activity import ActivityCreate, ActivityResponse, DataChangePayload, PaginatedActivityResponse
-from apis.user import get_current_user
+from core.security import get_current_user
+from schemas.activity import ActivityCreate, ActivityResponse, DataChangePayload, PaginatedActivityResponse, ActivityUpdate
 
 router = APIRouter()
 

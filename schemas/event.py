@@ -11,7 +11,14 @@ class EventBase(BaseModel):
 class EventCreate(EventBase):
     pass
 
-class Event(EventBase):
+class EventUpdate(EventBase):
+    pass
+
+class EventResponse(EventBase):
     id: int
-    model_config = {"from_attributes" : True }
+    model_config = {"from_attributes": True}
+
+# 兼容原有代码，保留Event类
+class Event(EventResponse):
+    pass
         

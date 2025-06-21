@@ -10,6 +10,68 @@ logger = logging.getLogger(__name__)
 from models.activity import Activity
 from models.user import User
 
+def record_activity(db: Session, user_id: int = None, action: str = None, target_type: str = None, target_id: int = None,
+                    # 新增兼容性参数
+                    user=None, module=None, action_type=None, title=None, details=None, 
+                    before_data=None, after_data=None, target=None):
+    """
+    记录用户活动，兼容新旧两种调用方式
+    
+    参数:
+    - db: 数据库会话
+    - user_id: 用户ID (旧参数)
+    - action: 操作描述 (旧参数)
+    - target_type: 目标类型 (旧参数)
+    - target_id: 目标ID (旧参数)
+    
+    新增参数（兼容ActivityService.record_data_change）:
+    - user: 用户对象
+    - module: 模块名称
+    - action_type: 操作类型
+    - title: 活动标题
+    - details: 详细信息
+    - before_data: 变更前的数据
+    - after_data: 变更后的数据
+    - target: 目标链接
+    """
+    try:
+        # 检测调用方式：如果有user参数，使用新的方式
+        if user is not None:
+            # 使用ActivityService类方法
+            return ActivityService.record_data_change(
+                db=db,
+                user=user,
+                module=module or "SYSTEM",
+                action_type=action_type or "UPDATE",
+                title=title or "系统操作",
+                action=action or "",
+                details=details,
+                before_data=before_data,
+                after_data=after_data,
+                target=target or f"/{target_type}/{target_id}" if target_type and target_id else None
+            )
+        else:
+            # 传统方式
+            activity = Activity(
+                title="系统操作",
+                action=action,
+                type="SYSTEM_ACTION",
+                icon="mdi-cog",
+                color="primary",
+                target=f"/{target_type}/{target_id}" if target_type and target_id else None,
+                user_id=user_id,
+                created_at=datetime.now()
+            )
+            
+            db.add(activity)
+            db.commit()
+            logger.info(f"记录活动: {action}")
+            return activity
+    except Exception as e:
+        logger.error(f"记录活动失败: {str(e)}")
+        db.rollback()
+        raise e
+
 class ActivityService:
     """活动记录服务，用于记录数据变更"""
     

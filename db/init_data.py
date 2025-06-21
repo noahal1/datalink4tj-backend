@@ -1,17 +1,23 @@
 import sys
 import os
+import logging
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+import json
 
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-import json
-
 from models.event import Event
 from models.activity import Activity
 from models.user import User
+from models.department import Department
 from db.database import SessionLocal
+from core.security import get_password_hash
+from db.init_routes import init_routes
+
+logger = logging.getLogger(__name__)
 
 def init_events(db: Session):
     """初始化事件数据"""
@@ -173,9 +179,89 @@ def init_all(db: Session):
     init_activities(db)
     print("示例数据初始化完成")
 
-if __name__ == "__main__":
-    db = SessionLocal()
+def init_data(db: Session):
+    """
+    初始化系统基础数据
+    """
+    # 初始化部门
+    init_departments(db)
+    
+    # 初始化管理员用户
+    init_admin_user(db)
+    
+    # 初始化路由
+    init_routes(db)
+    
+    logger.info("数据初始化完成")
+
+def init_departments(db: Session):
+    """
+    初始化基础部门数据
+    """
+    departments = [
+        {"name": "ADMIN", "description": "系统管理员"},
+        {"name": "EHS", "description": "环境健康安全部门"},
+        {"name": "QA", "description": "质量保证部门"},
+        {"name": "ASSY", "description": "装配部门"},
+        {"name": "MAINT", "description": "维护部门"}
+    ]
+    
+    count = 0
+    for dept_data in departments:
+        try:
+            # 检查部门是否已存在
+            existing = db.query(Department).filter(Department.name == dept_data["name"]).first()
+            if not existing:
+                dept = Department(**dept_data)
+                db.add(dept)
+                db.commit()
+                count += 1
+                logger.info(f"创建部门: {dept_data['name']}")
+        except IntegrityError:
+            db.rollback()
+            logger.warning(f"部门已存在: {dept_data['name']}")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"创建部门失败: {str(e)}")
+    
+    logger.info(f"共创建 {count} 个部门")
+
+def init_admin_user(db: Session):
+    """
+    初始化管理员用户
+    """
     try:
-        init_all(db)
-    finally:
-        db.close() 
+        # 检查管理员部门是否存在
+        admin_dept = db.query(Department).filter(Department.name == "ADMIN").first()
+        if not admin_dept:
+            logger.error("管理员部门不存在，无法创建管理员用户")
+            return
+        
+        # 检查是否已存在管理员
+        existing_admin = db.query(User).filter(User.name == "admin").first()
+        if existing_admin:
+            logger.info("管理员用户已存在，跳过创建")
+            return
+        
+        # 创建管理员用户
+        admin_user = User(
+            name="admin",
+            password=get_password_hash("admin123"),
+            department_id=admin_dept.id
+        )
+        
+        db.add(admin_user)
+        db.commit()
+        logger.info("成功创建管理员用户: admin (密码: admin123)")
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"创建管理员用户失败: {str(e)}")
+
+if __name__ == "__main__":
+    # 用于直接运行此脚本
+    from db.session import get_db
+    
+    logging.basicConfig(level=logging.INFO)
+    db = next(get_db())
+    init_data(db) 

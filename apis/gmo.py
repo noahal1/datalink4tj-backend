@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
-from db.database import get_db
-from models import event as event_model
-from schemas import event as event_schema
-from apis.user import get_current_user
+from typing import List, Optional
+from datetime import datetime
+
+from db.session import get_db
+from core.security import get_current_user
 from models.user import User
+from models.gmo import GMO
+from schemas.gmo import GMOCreate, GMOResponse, GMOUpdate
 from services.activity_service import ActivityService
 import logging
 
@@ -19,14 +21,14 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-@router.get("/", response_model=List[event_schema.Event])
+@router.get("/", response_model=List[GMOResponse])
 async def get_events(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    events = db.query(event_model.Event).all()
+    events = db.query(GMO).all()
     return events
 
-@router.post("/", response_model=event_schema.Event, status_code=status.HTTP_201_CREATED)
-async def create_event(event: event_schema.EventCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    db_event = event_model.Event(**event.dict())
+@router.post("/", response_model=GMOResponse, status_code=status.HTTP_201_CREATED)
+async def create_event(event: GMOCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    db_event = GMO(**event.dict())
     db.add(db_event)
     db.commit()
     db.refresh(db_event)
@@ -50,9 +52,9 @@ async def create_event(event: event_schema.EventCreate, db: Session = Depends(ge
     
     return db_event
 
-@router.put("/{event_id}", response_model=event_schema.Event)
-async def update_event(event_id: int, event: event_schema.EventCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    db_event = db.query(event_model.Event).filter(event_model.Event.id == event_id).first()
+@router.put("/{event_id}", response_model=GMOResponse)
+async def update_event(event_id: int, event: GMOUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    db_event = db.query(GMO).filter(GMO.id == event_id).first()
     if db_event is None:
         raise HTTPException(status_code=404, detail="Event not found")
     
@@ -94,7 +96,7 @@ async def update_event(event_id: int, event: event_schema.EventCreate, db: Sessi
 
 @router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_event(event_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    db_event = db.query(event_model.Event).filter(event_model.Event.id == event_id).first()
+    db_event = db.query(GMO).filter(GMO.id == event_id).first()
     if db_event is None:
         raise HTTPException(status_code=404, detail="Event not found")
     

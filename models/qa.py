@@ -7,11 +7,11 @@ from datetime import datetime
 class Qa(Base):
     __tablename__ = "qa"
     id = Column(Integer, primary_key=True, index=True)
-    line = Column(String, index=True)
-    day = Column(String)
-    month = Column(String)
-    year = Column(String)
-    value = Column(String)
+    line = Column(String(10), index=True)
+    day = Column(String(5))
+    month = Column(String(10))
+    year = Column(String(10))
+    value = Column(String(20))
     scrapflag = Column(Boolean, default=False)
 
 #质量杂项数据

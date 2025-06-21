@@ -1,18 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, date
 
 from db.session import get_db
 from models.event import Event
 from models.user import User
-from schemas.event import EventCreate, Event as EventSchema
-from apis.user import get_current_user
-from services.activity_service import ActivityService
+from core.security import get_current_user
+from schemas.event import EventCreate, EventResponse, EventUpdate, Event as EventSchema
+from services.activity_service import record_activity
 
 router = APIRouter()
 
-@router.get("/events/", response_model=List[EventSchema])
+@router.get("/events/", response_model=List[EventResponse])
 def get_events(
     skip: int = 0,
     limit: int = 100,
@@ -45,7 +46,7 @@ def get_events(
     
     return events
 
-@router.post("/events/", response_model=EventSchema)
+@router.post("/events/", response_model=EventResponse)
 def create_event(
     event: EventCreate,
     db: Session = Depends(get_db),
@@ -66,7 +67,7 @@ def create_event(
     db.refresh(db_event)
     
     # 记录活动
-    ActivityService.record_data_change(
+    record_activity(
         db=db,
         user=current_user,
         module="EVENT",
@@ -80,7 +81,7 @@ def create_event(
     
     return db_event
 
-@router.get("/events/{event_id}", response_model=EventSchema)
+@router.get("/events/{event_id}", response_model=EventResponse)
 def get_event(
     event_id: int,
     db: Session = Depends(get_db),
@@ -95,10 +96,10 @@ def get_event(
     
     return event
 
-@router.put("/events/{event_id}", response_model=EventSchema)
+@router.put("/events/{event_id}", response_model=EventResponse)
 def update_event(
     event_id: int,
-    event_update: EventCreate,
+    event_update: EventUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -128,7 +129,7 @@ def update_event(
     db.refresh(db_event)
     
     # 记录活动
-    ActivityService.record_data_change(
+    record_activity(
         db=db,
         user=current_user,
         module="EVENT",
@@ -178,7 +179,7 @@ def delete_event(
     db.commit()
     
     # 记录活动
-    ActivityService.record_data_change(
+    record_activity(
         db=db,
         user=current_user,
         module="EVENT",

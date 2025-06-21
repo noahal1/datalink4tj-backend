@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Optional
 
 class DepartmentBase(BaseModel):
     name: str
@@ -6,8 +7,14 @@ class DepartmentBase(BaseModel):
 class DepartmentCreate(DepartmentBase):
     pass
 
-class Department(DepartmentBase):
-    id: int
+class DepartmentUpdate(BaseModel):
+    name: Optional[str] = None
 
-    class Config:
-        orm_mode = True
+class DepartmentResponse(DepartmentBase):
+    id: int
+    description: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+# 兼容原有代码，保留Department类
+class Department(DepartmentResponse):
+    pass
